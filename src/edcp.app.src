@@ -1,0 +1,12 @@
+{application, edcp,
+ [
+  {description, ""},
+  {vsn, "1"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {mod, { edcp_app, []}},
+  {env, []}
+ ]}.

@@ -1,0 +1,9 @@
+*.beam
+edcp.iml
+.idea/
+.rebar/
+ebin/
+deps/
+rel/edcp/
+*~
+erl_crash.dump

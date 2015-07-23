@@ -34,37 +34,37 @@
 -define(SnapshotType_Ack,       16#08).
 
 -record(edcp_packet, {
-    magic = 16#00,
-    op_code = 16#00,
-    data_type = 16#00,
-    status = 16#0000,
-    opaque = 16#00000000,
-    cas = 16#0000000000000000,
-    extras = <<>>,
-    key = <<>>,
-    value = <<>>,
-    key_size = 16#0000,
-    extras_size = 16#00,
-    body_size = 16#00000000
+    magic = 16#00 :: integer(),
+    op_code = 16#00 :: integer(),
+    data_type = 16#00 :: integer(),
+    status = 16#0000 :: integer(),
+    opaque = 16#00000000 :: integer(),
+    cas = 16#0000000000000000 :: integer(),
+    extras = <<>> :: binary(),
+    key = <<>> :: binary(),
+    value = <<>> :: binary(),
+    key_size = 16#0000 :: integer(),
+    extras_size = 16#00 :: integer(),
+    body_size = 16#00000000 :: integer()
 }).
 
 -record(edcp_stream_request, {
-    flags = 16#00000000,
-    seqno_start = 16#0000000000000000,
-    seqno_end = 16#0000000000000000,
-    vbucket_uuid = 16#0000000000000000,
-    snapshot_start = 16#0000000000000000,
-    snapshot_end = 16#0000000000000000
+    flags = 16#00000000 :: integer(),
+    seqno_start = 16#0000000000000000 :: integer(),
+    seqno_end = 16#0000000000000000 :: integer(),
+    vbucket_uuid = 16#0000000000000000 :: integer(),
+    snapshot_start = 16#0000000000000000 :: integer(),
+    snapshot_end = 16#0000000000000000 :: integer()
 }).
 
 -record(edcp_snapshot_marker, {
-    type = 16#00000000,
-    seqno_start = 16#0000000000000000,
-    seqno_end = 16#0000000000000000
+    type = 16#00000000 :: integer(),
+    seqno_start = 16#0000000000000000 :: integer(),
+    seqno_end = 16#0000000000000000 :: integer()
 }).
 
 -record(edcp_log, {
-    seqno = 16#0000000000000000,
-    timestamp = 16#00000000,
-    cmd = <<>>
+    seqno = 16#0000000000000000 :: integer(),
+    timestamp = 16#00000000 :: integer(),
+    cmd = <<>> :: binary()
 }).

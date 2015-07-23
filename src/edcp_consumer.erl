@@ -45,7 +45,13 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {socket, buffer, timeout, vbucket_uuid, mod, mod_state}).
+-record(state, {
+    socket :: any(),
+    buffer :: binary(),
+    timeout :: integer(),
+    vbucket_uuid :: integer(),
+    mod :: module(),
+    mod_state :: term()}).
 
 -compile([{parse_transform, lager_transform}]).
 
@@ -314,8 +320,8 @@ handle_packet(Packet = #edcp_packet{op_code = ?OP_SnapshotMarker}, snapshot, Sta
     {snapshot, State};
 
 handle_packet(Packet = #edcp_packet{op_code = ?OP_Log}, snapshot, State = #state{mod = Mod, mod_state = ModState}) ->
-    #edcp_log{seqno = SeqNo, timestamp = TimeStamp, cmd = CMD} = edcp_protocol:decode_log(Packet),
-    case Mod:handle_snapshot_item({SeqNo, TimeStamp, CMD}, ModState) of
+    #edcp_log{seqno = SeqNo, log = Log} = edcp_protocol:decode_log(Packet),
+    case Mod:handle_snapshot_item({SeqNo, Log}, ModState) of
         {ok, NewModState} ->
             {snapshot, State#state{mod_state = NewModState}};
         {error, Reason} ->

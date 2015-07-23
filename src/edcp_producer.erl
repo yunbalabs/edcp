@@ -34,7 +34,10 @@
     ModState::term()) ->
     ok.
 
--record(state, {socket, transport, mod}).
+-record(state, {
+    socket :: any(),
+    transport :: module(),
+    mod :: module()}).
 
 -compile([{parse_transform, lager_transform}]).
 
@@ -156,6 +159,6 @@ serialize_snapshot_item(Items) ->
 
 serialize_snapshot_item([], SerializedList) ->
     lists:reverse(SerializedList);
-serialize_snapshot_item([{SeqNo, TimeStamp, CMD} | Rest], SerializedList) ->
-    Serialized = edcp_protocol:encode_log(#edcp_log{seqno = SeqNo, timestamp = TimeStamp, cmd = CMD}),
+serialize_snapshot_item([{SeqNo, Log} | Rest], SerializedList) ->
+    Serialized = edcp_protocol:encode_log(#edcp_log{seqno = SeqNo, log = Log}),
     serialize_snapshot_item(Rest, [Serialized | SerializedList]).

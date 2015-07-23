@@ -33,9 +33,9 @@ encode_snapshot_marker(#edcp_snapshot_marker{
     Extras = <<SeqnoStart:64, SeqnoEnd:64, Type:32>>,
     encode(#edcp_packet{magic = ?Magic_Request, op_code = ?OP_SnapshotMarker, extras = Extras}).
 
-encode_log(#edcp_log{seqno = SeqNo, timestamp = TimeStamp, cmd = CMD}) when is_integer(TimeStamp) andalso is_binary(CMD) ->
-    Extras = <<SeqNo:64, TimeStamp:32>>,
-    encode(#edcp_packet{magic = ?Magic_Request, op_code = ?OP_Log, extras = Extras, value = CMD}).
+encode_log(#edcp_log{seqno = SeqNo, log = Log}) when is_integer(SeqNo) andalso is_binary(Log) ->
+    Extras = <<SeqNo:64>>,
+    encode(#edcp_packet{magic = ?Magic_Request, op_code = ?OP_Log, extras = Extras, value = Log}).
 
 encode(Packet) when is_record(Packet, edcp_packet) ->
     Magic = Packet#edcp_packet.magic,
@@ -66,9 +66,9 @@ decode_snapshot_marker(#edcp_packet{magic = ?Magic_Request, op_code = ?OP_Snapsh
     <<SeqnoStart:64, SeqnoEnd:64, Type:32>> = Extras,
     #edcp_snapshot_marker{type = Type, seqno_start = SeqnoStart, seqno_end = SeqnoEnd}.
 
-decode_log(#edcp_packet{magic = ?Magic_Request, op_code = ?OP_Log, extras = Extras, value = CMD}) ->
-    <<SeqNo:64, TimeStamp:32>> = Extras,
-    #edcp_log{seqno = SeqNo, timestamp = TimeStamp, cmd = CMD}.
+decode_log(#edcp_packet{magic = ?Magic_Request, op_code = ?OP_Log, extras = Extras, value = Log}) ->
+    <<SeqNo:64>> = Extras,
+    #edcp_log{seqno = SeqNo, log = Log}.
 
 decode(Buffer) ->
     decode(Buffer, []).

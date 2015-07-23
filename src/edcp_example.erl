@@ -38,9 +38,7 @@ stream_starting(VBucketUUID, SeqStart, SeqEnd) ->
     {ok, SnapShotList, ModState}.
 
 stream_snapshot(SnapshotStart, SnapshotEnd, ModState) ->
-    {M, S, _} = os:timestamp(),
-    TimeStamp = M * 1000000 + S,
-    ItemList = lists:duplicate(SnapshotEnd - SnapshotStart + 1, {SnapshotStart, TimeStamp, <<"test">>}),
+    ItemList = lists:duplicate(SnapshotEnd - SnapshotStart + 1, {SnapshotStart, <<"log content">>}),
     {ok, ItemList, ModState}.
 
 stream_end(_ModState) ->
@@ -49,7 +47,7 @@ stream_end(_ModState) ->
 %%%===================================================================
 %%% edcp_consumer callbacks
 %%%===================================================================
-handle_snapshot_item(Item = {_SeqNo, _TimeStamp, _CMD}, ModState) ->
+handle_snapshot_item(Item = {_SeqNo, _Log}, ModState) ->
     lager:debug("receive ~p", [Item]),
     {ok, ModState}.
 

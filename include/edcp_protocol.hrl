@@ -65,6 +65,5 @@
 
 -record(edcp_log, {
     seqno = 16#0000000000000000 :: integer(),
-    timestamp = 16#00000000 :: integer(),
-    cmd = <<>> :: binary()
+    log = <<>> :: binary()
 }).

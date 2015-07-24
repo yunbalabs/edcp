@@ -33,13 +33,32 @@ open_stream([Host, Port], [VBucketUUID, SeqNoStart, SeqNoEnd], Timeout, ModState
 stream_starting(VBucketUUID, SeqStart, SeqEnd) ->
     lager:debug("start stream with ~p ~p-~p", [VBucketUUID, SeqStart, SeqEnd]),
 
-    SnapShotList = [{0, 10}, {11, 20}, {21, 33}],
-    ModState = undefined,
-    {ok, SnapShotList, ModState}.
+    Queue = queue:new(),
+    Queue2 = queue:in({1, <<"log content 1">>}, Queue),
+    Queue3 = queue:in({2, <<"log content 2">>}, Queue2),
+    Queue4 = queue:in({3, <<"log content 3">>}, Queue3),
+    Queue5 = queue:in({4, <<"log content 4">>}, Queue4),
+    ModState = Queue5,
+    {ok, ModState}.
 
-stream_snapshot(SnapshotStart, SnapshotEnd, ModState) ->
-    ItemList = lists:duplicate(SnapshotEnd - SnapshotStart + 1, {SnapshotStart, <<"log content">>}),
-    {ok, ItemList, ModState}.
+stream_snapshot(SnapshotStart, 0, Queue) ->
+    case get_snapshots(SnapshotStart, 2, Queue) of
+        {[], Queue2} ->
+            {stop, Queue2};
+        {SnapShot, Queue2} ->
+            {ok, SnapShot, Queue2}
+    end;
+stream_snapshot(SnapshotStart, SeqEnd, Queue) when SeqEnd >= SnapshotStart ->
+    SnapshotLen = if
+                      SeqEnd - SnapshotStart > 1 -> 2;
+                      true -> SeqEnd - SnapshotStart + 1
+                  end,
+    case get_snapshots(SnapshotStart, SnapshotLen, Queue) of
+        {[], Queue2} ->
+            {stop, Queue2};
+        {SnapShot, Queue2} ->
+            {ok, SnapShot, Queue2}
+    end.
 
 stream_end(_ModState) ->
     ok.
@@ -61,3 +80,21 @@ handle_stream_end(?Flag_OK, _ModState) ->
 handle_stream_end(ErrorFlag, _ModState) ->
     lager:error("stream end with error ~p", [ErrorFlag]),
     ok.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+get_snapshots(StartNum, Len, Queue) ->
+    get_snapshots(StartNum, Len, Queue, []).
+
+get_snapshots(_StartNum, 0, Queue, SnapShot) ->
+    {lists:reverse(SnapShot), Queue};
+get_snapshots(StartNum, Len, Queue, SnapShot) ->
+    case queue:out(Queue) of
+        {empty, Queue} ->
+            {lists:reverse(SnapShot), Queue};
+        {{value, {StartNum, Log}}, Queue2} ->
+            get_snapshots(StartNum + 1, Len - 1, Queue2, [{StartNum, Log} | SnapShot]);
+        {{value, _Item}, Queue2} ->
+            get_snapshots(StartNum, Len, Queue2, SnapShot)
+    end.

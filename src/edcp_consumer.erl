@@ -75,7 +75,7 @@
     ModState :: term()) ->
     {ok, pid()} | ignore | {error, Reason :: term()}).
 start_link(CallbackMod, ProducerAddress, RequestParameters, Timeout, ModState) ->
-    gen_fsm:start_link({local, ?SERVER}, ?MODULE,
+    gen_fsm:start_link(?MODULE,
         [ProducerAddress, RequestParameters, Timeout, {CallbackMod, ModState}],
         []).
 

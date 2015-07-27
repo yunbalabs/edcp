@@ -13,7 +13,7 @@
 
 -include("edcp_protocol.hrl").
 
--export([start_link/4]).
+-export([start_link/4, push_item/2]).
 -export([init/4]).
 
 -callback stream_starting(
@@ -28,6 +28,7 @@
     SeqEnd::integer(),
     ModState::term()) ->
     {ok, ItemList::list(), NewModState::term()} |
+    {hang, NewModState::term()} |
     {stop, NewModState::term()} |
     {error, Reason::term()}.
 
@@ -48,6 +49,9 @@
 start_link(Ref, Socket, Transport, Opts) ->
     Pid = spawn_link(?MODULE, init, [Ref, Socket, Transport, Opts]),
     {ok, Pid}.
+
+push_item(Pid, Item) ->
+    Pid ! {push_item, Item}.
 
 %%%===================================================================
 %%% Internal functions
@@ -134,28 +138,49 @@ handle_request(Request = #edcp_packet{magic = ?Magic_Request, op_code = ?OP_Stre
 
 handle_snapshot(SnapshotStart, SeqEnd, _ModState, State) when SeqEnd =/= 0 andalso SnapshotStart > SeqEnd ->
     {ok, State};
-handle_snapshot(SnapshotStart, SeqEnd, ModState,
-    State = #state{socket=Socket, transport=Transport, mod = Mod}) ->
+handle_snapshot(SnapshotStart, SeqEnd, ModState, State = #state{mod = Mod}) ->
     case Mod:stream_snapshot(SnapshotStart, SeqEnd, ModState) of
         {ok, ItemList, NewModState} when length(ItemList) > 0 ->
-            SnapshotEnd = SnapshotStart + length(ItemList) - 1,
-            SnapshotMarker = edcp_protocol:encode_snapshot_marker(#edcp_snapshot_marker{
-                type = ?SnapshotType_Memory,
-                seqno_start = SnapshotStart,
-                seqno_end = SnapshotEnd
-            }),
-            SnapshotList = serialize_snapshot_item(ItemList),
-
-            case Transport:send(Socket, [SnapshotMarker | SnapshotList]) of
-                ok ->
+            case send_snapshot(SnapshotStart, ItemList, State) of
+                {ok, {SnapshotStart, SnapshotEnd}} ->
                     handle_snapshot(SnapshotEnd + 1, SeqEnd, NewModState, State);
-                {error, Reason} ->
+                {error, {SnapshotStart, SnapshotEnd}, Reason} ->
                     {tcp_error, {SnapshotStart, SnapshotEnd}, Reason}
             end;
+        {hang, NewModState} ->
+            handle_mailbox(SnapshotStart, SeqEnd, NewModState, State);
         {stop, NewModState} ->
             {ok, NewModState};
         {error, Reason} ->
             {error, {SnapshotStart, SeqEnd}, Reason}
+    end.
+
+handle_mailbox(SnapshotStart, SeqEnd, NewModState, State) ->
+    receive
+        {push_item, {SeqNo, Log}} when SeqNo =< SnapshotStart ->
+            case send_snapshot(SeqNo, [{SeqNo, Log}], State) of
+                {ok, {_SnapshotStart2, SnapshotEnd2}} ->
+                    handle_mailbox(SnapshotEnd2 + 1, SeqEnd, NewModState, State);
+                {error, {SnapshotStart2, SnapshotEnd2}, Reason} ->
+                    {tcp_error, {SnapshotStart2, SnapshotEnd2}, Reason}
+            end;
+        {push_item, _} ->
+            {error, {SnapshotStart, SeqEnd}, seqno_mismatch};
+        _ ->
+            {ok, NewModState}
+    end.
+
+send_snapshot(SnapshotStart, ItemList, #state{socket=Socket, transport=Transport}) ->
+    SnapshotEnd = SnapshotStart + length(ItemList) - 1,
+    SnapshotMarker = edcp_protocol:encode_snapshot_marker(#edcp_snapshot_marker{
+        type = ?SnapshotType_Memory,
+        seqno_start = SnapshotStart,
+        seqno_end = SnapshotEnd
+    }),
+    SnapshotList = serialize_snapshot_item(ItemList),
+    case Transport:send(Socket, [SnapshotMarker | SnapshotList]) of
+        ok -> {ok, {SnapshotStart, SnapshotEnd}};
+        {error, Reason} -> {error, {SnapshotStart, SnapshotEnd}, Reason}
     end.
 
 serialize_snapshot_item(Items) ->

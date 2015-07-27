@@ -16,5 +16,5 @@ This project is an implementation of [Database Change Protocol (DCP)](https://gi
 You can find in [edcp_example.erl](src/edcp_example.erl).
 
 ```erlang
-edcp_example:open_stream(["127.0.0.1", 12121], [1, 0, 0], 100000, undefined).
+edcp_example:open_stream(["127.0.0.1", 12121], [1, 1, 0], 100000, undefined).
 ```

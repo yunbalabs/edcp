@@ -11,6 +11,7 @@
 -define(Magic_Request,          16#80).
 -define(Magic_Response,         16#81).
 
+-define(OP_Noop,                16#0a).
 -define(OP_StreamRequest,       16#53).
 -define(OP_SnapshotMarker,      16#56).
 -define(OP_StreamEnd,           16#55).

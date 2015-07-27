@@ -138,7 +138,7 @@ handle_request(Request = #edcp_packet{magic = ?Magic_Request, op_code = ?OP_Stre
 
 handle_snapshot(SnapshotStart, SeqEnd, _ModState, State) when SeqEnd =/= 0 andalso SnapshotStart > SeqEnd ->
     {ok, State};
-handle_snapshot(SnapshotStart, SeqEnd, ModState, State = #state{mod = Mod}) ->
+handle_snapshot(SnapshotStart, SeqEnd, ModState, State = #state{socket=Socket, transport=Transport, mod = Mod}) ->
     case Mod:stream_snapshot(SnapshotStart, SeqEnd, ModState) of
         {ok, ItemList, NewModState} when length(ItemList) > 0 ->
             case send_snapshot(SnapshotStart, ItemList, State) of
@@ -148,14 +148,17 @@ handle_snapshot(SnapshotStart, SeqEnd, ModState, State = #state{mod = Mod}) ->
                     {tcp_error, {SnapshotStart, SnapshotEnd}, Reason}
             end;
         {hang, NewModState} ->
-            handle_mailbox(SnapshotStart, SeqEnd, NewModState, State);
+            ok = Transport:setopts(Socket, [{active, once}]),
+            Result = handle_mailbox(SnapshotStart, SeqEnd, NewModState, State),
+            ok = Transport:setopts(Socket, [{active, false}]),
+            Result;
         {stop, NewModState} ->
             {ok, NewModState};
         {error, Reason} ->
             {error, {SnapshotStart, SeqEnd}, Reason}
     end.
 
-handle_mailbox(SnapshotStart, SeqEnd, NewModState, State) ->
+handle_mailbox(SnapshotStart, SeqEnd, NewModState, State = #state{socket=Socket, transport=Transport}) ->
     receive
         {push_item, {SeqNo, Log}} when SeqNo =< SnapshotStart ->
             case send_snapshot(SeqNo, [{SeqNo, Log}], State) of
@@ -166,6 +169,12 @@ handle_mailbox(SnapshotStart, SeqEnd, NewModState, State) ->
             end;
         {push_item, _} ->
             {error, {SnapshotStart, SeqEnd}, seqno_mismatch};
+        {tcp, Socket, _NoopPacket} ->
+            Transport:setopts(Socket, [{active, once}]),
+            Transport:send(Socket, edcp_protocol:encode(#edcp_packet{
+                magic = ?Magic_Response, op_code = ?OP_Noop, status = ?Status_NoError
+            })),
+            handle_mailbox(SnapshotStart, SeqEnd, NewModState, State);
         _ ->
             {ok, NewModState}
     end.

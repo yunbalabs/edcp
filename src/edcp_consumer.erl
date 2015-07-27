@@ -48,6 +48,7 @@
 -record(state, {
     socket :: any(),
     buffer :: binary(),
+    ping_internal :: integer(),
     timeout :: integer(),
     vbucket_uuid :: integer(),
     mod :: module(),
@@ -117,10 +118,13 @@ init([[Host, Port], [VBucketUUID, SeqNoStart, SeqNoEnd], Timeout, {CallbackMod, 
         {ok, Socket} ->
             gen_tcp:send(Socket, StreamRequestPacket),
 
+            PingInternal = trunc(Timeout/2),
+            erlang:send_after(PingInternal, self(), noop),
+
             lager:debug("consumer start with the request ~p", [StreamRequestPacket]),
             {ok, stream_request, #state{
                 socket = Socket, buffer = <<>>,
-                timeout = Timeout, vbucket_uuid = VBucketUUID,
+                ping_internal = PingInternal, timeout = Timeout, vbucket_uuid = VBucketUUID,
                 mod = CallbackMod, mod_state = ModState
             }, Timeout};
         Error ->
@@ -260,6 +264,12 @@ handle_info({tcp, Socket, Data}, StateName, State = #state{socket = Socket, buff
             {stop, invalid_data, StateName}
     end;
 
+handle_info(noop, StateName, State = #state{socket = Socket, timeout = Timeout}) ->
+    gen_tcp:send(Socket, edcp_protocol:encode(#edcp_packet{
+        magic = ?Magic_Request, op_code = ?OP_Noop
+    })),
+    {next_state, StateName, State, Timeout};
+
 handle_info(_Info, StateName, State) ->
     {next_state, StateName, State}.
 
@@ -301,6 +311,11 @@ handle_packets([Packet | Rest], StateName, State) ->
     {StateName2, State2} = handle_packet(Packet, StateName, State),
     handle_packets(Rest, StateName2, State2).
 
+handle_packet(#edcp_packet{
+    magic = ?Magic_Response, op_code = ?OP_Noop
+}, StateName, State = #state{ping_internal = PingInternal}) ->
+    erlang:send_after(PingInternal, self(), noop),
+    {StateName, State};
 handle_packet(#edcp_packet{
     magic = ?Magic_Response, op_code = ?OP_StreamRequest, status = ?Status_NoError
 }, stream_request, State) ->

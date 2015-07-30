@@ -23,13 +23,13 @@ start([Host, Port], [VBucketUUID, SeqNoStart, SeqNoEnd], Timeout, ModState) ->
 %% ===================================================================
 
 init([]) ->
+    [{callback, CallbackMod}, {reconnect_delay, ReconnectDelay}] = edcp_config:consumer_config(),
+
     RestartStrategy = simple_one_for_one,
-    MaxRestarts = 1000,
-    MaxSecondsBetweenRestarts = 3600,
+    MaxRestarts = 1,
+    MaxSecondsBetweenRestarts = ReconnectDelay,
 
     SupFlags = {RestartStrategy, MaxRestarts, MaxSecondsBetweenRestarts},
-
-    [{callback, CallbackMod}, {reconnect_delay, ReconnectDelay}] = edcp_config:consumer_config(),
 
     Restart = {transient, ReconnectDelay},
     Shutdown = 2000,

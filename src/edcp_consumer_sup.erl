@@ -1,6 +1,6 @@
 -module(edcp_consumer_sup).
 
--behaviour(supervisor).
+-behaviour(supervisor2).
 
 %% API
 -export([start_link/0, start/4]).
@@ -13,10 +13,10 @@
 %% ===================================================================
 
 start_link() ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+    supervisor2:start_link({local, ?MODULE}, ?MODULE, []).
 
 start([Host, Port], [VBucketUUID, SeqNoStart, SeqNoEnd], Timeout, ModState) ->
-    supervisor:start_child(?MODULE, [[Host, Port], [VBucketUUID, SeqNoStart, SeqNoEnd], Timeout, ModState]).
+    supervisor2:start_child(?MODULE, [[Host, Port], [VBucketUUID, SeqNoStart, SeqNoEnd], Timeout, ModState]).
 
 %% ===================================================================
 %% Supervisor callbacks
@@ -29,11 +29,11 @@ init([]) ->
 
     SupFlags = {RestartStrategy, MaxRestarts, MaxSecondsBetweenRestarts},
 
-    Restart = temporary,
+    [{callback, CallbackMod}, {reconnect_delay, ReconnectDelay}] = edcp_config:consumer_config(),
+
+    Restart = {transient, ReconnectDelay},
     Shutdown = 2000,
     Type = worker,
-
-    [{callback, CallbackMod}] = edcp_config:consumer_config(),
 
     MonitorChild = {edcp_consumer, {edcp_consumer, start_link,
         [CallbackMod]},

@@ -8,7 +8,8 @@ This project is an implementation of [Database Change Protocol (DCP)](https://gi
 {edcp, [
        {listen_port, 12121},                   %% producer listen port
        {producer_callback, edcp_example},      %% producer callback
-       {consumer_callback, edcp_example}       %% consumer callback
+       {consumer_callback, edcp_example},      %% consumer callback
+       {consumer_reconnect_delay, 30}          %% auto reconnect after 30 seconds
 ]}
 ```
 

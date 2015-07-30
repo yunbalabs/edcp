@@ -16,7 +16,7 @@
 
 -export([
     open_stream/4,
-    stream_starting/3, stream_snapshot/3, stream_end/1,
+    stream_starting/3, stream_snapshot/3, stream_end/1, stream_info/2,
     handle_snapshot_item/2, handle_stream_error/2, handle_stream_end/2]).
 
 -compile([{parse_transform, lager_transform}]).
@@ -39,12 +39,14 @@ stream_starting(VBucketUUID, SeqStart, SeqEnd) ->
     Queue4 = queue:in({3, <<"log content 3">>}, Queue3),
     Queue5 = queue:in({4, <<"log content 4">>}, Queue4),
     ModState = Queue5,
+
+    self() ! {newitem, {5, <<"new log">>}},
     {ok, ModState}.
 
 stream_snapshot(SnapshotStart, 0, Queue) ->
     case get_snapshots(SnapshotStart, 2, Queue) of
         {[], Queue2} ->
-            {stop, Queue2};
+            {hang, Queue2};
         {SnapShot, Queue2} ->
             {ok, SnapShot, Queue2}
     end;
@@ -55,13 +57,18 @@ stream_snapshot(SnapshotStart, SeqEnd, Queue) when SeqEnd >= SnapshotStart ->
                   end,
     case get_snapshots(SnapshotStart, SnapshotLen, Queue) of
         {[], Queue2} ->
-            {stop, Queue2};
+            {hang, Queue2};
         {SnapShot, Queue2} ->
             {ok, SnapShot, Queue2}
     end.
 
 stream_end(_ModState) ->
     ok.
+
+stream_info({newitem, {SeqNo, Log}}, ModState) ->
+    edcp_producer:push_item(self(), {SeqNo, Log}),
+    erlang:send_after(2000, self(), {newitem, {SeqNo + 1, Log}}),
+    {ok, ModState}.
 
 %%%===================================================================
 %%% edcp_consumer callbacks

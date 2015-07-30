@@ -36,6 +36,12 @@
     ModState::term()) ->
     ok.
 
+-callback stream_info(
+    Info::any(),
+    ModState::term()) ->
+    {ok, NewModState::term()} |
+    {stop, NewModState::term()}.
+
 -record(state, {
     socket :: any(),
     transport :: module(),
@@ -158,7 +164,7 @@ handle_snapshot(SnapshotStart, SeqEnd, ModState, State = #state{socket=Socket, t
             {error, {SnapshotStart, SeqEnd}, Reason}
     end.
 
-handle_mailbox(SnapshotStart, SeqEnd, NewModState, State = #state{socket=Socket, transport=Transport}) ->
+handle_mailbox(SnapshotStart, SeqEnd, NewModState, State = #state{socket=Socket, transport=Transport, mod = Mod}) ->
     receive
         {push_item, {SeqNo, Log}} when SeqNo =< SnapshotStart ->
             case send_snapshot(SeqNo, [{SeqNo, Log}], State) of
@@ -175,8 +181,17 @@ handle_mailbox(SnapshotStart, SeqEnd, NewModState, State = #state{socket=Socket,
                 magic = ?Magic_Response, op_code = ?OP_Noop, status = ?Status_NoError
             })),
             handle_mailbox(SnapshotStart, SeqEnd, NewModState, State);
-        _ ->
-            {ok, NewModState}
+        {tcp_closed, Socket} ->
+            {ok, NewModState};
+        {tcp_error, Socket, _Reason} ->
+            {ok, NewModState};
+        Info ->
+            case Mod:stream_info(Info, NewModState) of
+                {ok, NewModState2} ->
+                    handle_mailbox(SnapshotStart, SeqEnd, NewModState2, State);
+                {stop, NewModState2} ->
+                    {ok, NewModState2}
+            end
     end.
 
 send_snapshot(SnapshotStart, ItemList, #state{socket=Socket, transport=Transport}) ->

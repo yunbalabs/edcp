@@ -27,5 +27,6 @@ producer_config() ->
 consumer_config() ->
     {ok, App}  = application:get_application(?MODULE),
     CallbackMod = application:get_env(App, consumer_callback, edcp_example),
+    ReconnectDelay = application:get_env(App, consumer_reconnect_delay, 30),
 
-    [{callback, CallbackMod}].
+    [{callback, CallbackMod}, {reconnect_delay, ReconnectDelay}].

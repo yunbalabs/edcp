@@ -147,18 +147,16 @@ init([[Host, Port], [VBucketUUID, SeqNoStart, SeqNoEnd], Timeout, {CallbackMod, 
     {next_state, NextStateName :: atom(), NextState :: #state{},
         timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}).
-stream_request(timeout, State = #state{mod = Mod, mod_state = ModState}) ->
-    Mod:handle_stream_error(timeout, ModState),
-    {stop, normal, State}.
+stream_request(timeout, State) ->
+    {stop, timeout, State}.
 
 -spec(snapshot(Event :: term(), State :: #state{}) ->
     {next_state, NextStateName :: atom(), NextState :: #state{}} |
     {next_state, NextStateName :: atom(), NextState :: #state{},
         timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}).
-snapshot(timeout, State = #state{mod = Mod, mod_state = ModState}) ->
-    Mod:handle_stream_error(timeout, ModState),
-    {stop, normal, State}.
+snapshot(timeout, State) ->
+    {stop, timeout, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -245,12 +243,11 @@ handle_sync_event(_Event, _From, StateName, State) ->
 handle_info({tcp_closed, Socket}, stream_end, State = #state{socket = Socket}) ->
     gen_tcp:close(Socket),
     {stop, normal, State};
-handle_info({tcp_closed, Socket}, _StateName, State = #state{socket = Socket, mod = Mod, mod_state = ModState}) ->
+handle_info({tcp_closed, Socket}, _StateName, State = #state{socket = Socket}) ->
     gen_tcp:close(Socket),
-    Mod:handle_stream_error(tcp_closed, ModState),
-    {stop, normal, State};
+    {stop, tcp_closed, State};
 
-handle_info({tcp, Socket, Data}, StateName, State = #state{socket = Socket, buffer = Buffer, timeout = Timeout, mod = Mod, mod_state = ModState}) ->
+handle_info({tcp, Socket, Data}, StateName, State = #state{socket = Socket, buffer = Buffer, timeout = Timeout}) ->
     NewData = << Buffer/binary, Data/binary >>,
     case edcp_protocol:decode(NewData) of
         {ok, Packets, Rest} ->
@@ -263,9 +260,8 @@ handle_info({tcp, Socket, Data}, StateName, State = #state{socket = Socket, buff
             end;
         {error, invalid_data} ->
             lager:error("tcp receive invalid data ~p", [Buffer]),
-            Mod:handle_stream_error(tcp_closed, ModState),
             gen_tcp:close(Socket),
-            {stop, normal, State}
+            {stop, invalid_data, State}
     end;
 
 handle_info(noop, StateName, State = #state{socket = Socket, timeout = Timeout}) ->

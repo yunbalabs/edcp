@@ -46,7 +46,7 @@
 -define(SERVER, ?MODULE).
 
 -record(state, {
-    socket :: any(),
+    socket = undefined :: any(),
     buffer :: binary(),
     ping_internal :: integer(),
     timeout :: integer(),
@@ -97,7 +97,33 @@ start_link(CallbackMod, ProducerAddress, RequestParameters, Timeout, ModState) -
     {ok, StateName :: atom(), StateData :: #state{}} |
     {ok, StateName :: atom(), StateData :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore).
-init([[Host, Port], [VBucketUUID, SeqNoStart, SeqNoEnd], Timeout, {CallbackMod, ModState}]) ->
+init([ProducerAddress, RequestParameters, Timeout, {CallbackMod, ModState}]) ->
+    gen_fsm:send_event(self(), {request, ProducerAddress, RequestParameters}),
+
+    PingInternal = trunc(Timeout / 2),
+    {ok, stream_request, #state{
+        ping_internal = PingInternal, timeout = Timeout, mod = CallbackMod, mod_state = ModState
+    }, Timeout}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% There should be one instance of this function for each possible
+%% state name. Whenever a gen_fsm receives an event sent using
+%% gen_fsm:send_event/2, the instance of this function with the same
+%% name as the current state name StateName is called to handle
+%% the event. It is also called if a timeout occurs.
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec(stream_request(Event :: term(), State :: #state{}) ->
+    {next_state, NextStateName :: atom(), NextState :: #state{}} |
+    {next_state, NextStateName :: atom(), NextState :: #state{},
+        timeout() | hibernate} |
+    {stop, Reason :: term(), NewState :: #state{}}).
+stream_request({request, [Host, Port], [VBucketUUID, SeqNoStart, SeqNoEnd]}, State = #state{
+    socket = undefined, timeout = Timeout, ping_internal = PingInternal
+}) ->
     StreamRequestPacket = case ets:lookup(edcp_consumer_vbucket, VBucketUUID) of
                               [{_, StreamRequest}] ->
                                   StreamRequest2 = StreamRequest#edcp_stream_request{
@@ -117,36 +143,15 @@ init([[Host, Port], [VBucketUUID, SeqNoStart, SeqNoEnd], Timeout, {CallbackMod, 
     case gen_tcp:connect(Host, Port, [binary, {packet, 0}]) of
         {ok, Socket} ->
             gen_tcp:send(Socket, StreamRequestPacket),
-
-            PingInternal = trunc(Timeout/2),
             erlang:send_after(PingInternal, self(), noop),
-
             lager:debug("consumer start with the request ~p", [StreamRequestPacket]),
-            {ok, stream_request, #state{
-                socket = Socket, buffer = <<>>,
-                ping_internal = PingInternal, timeout = Timeout, vbucket_uuid = VBucketUUID,
-                mod = CallbackMod, mod_state = ModState
-            }, Timeout};
-        Error ->
-            {stop, Error}
-    end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% There should be one instance of this function for each possible
-%% state name. Whenever a gen_fsm receives an event sent using
-%% gen_fsm:send_event/2, the instance of this function with the same
-%% name as the current state name StateName is called to handle
-%% the event. It is also called if a timeout occurs.
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec(stream_request(Event :: term(), State :: #state{}) ->
-    {next_state, NextStateName :: atom(), NextState :: #state{}} |
-    {next_state, NextStateName :: atom(), NextState :: #state{},
-        timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: #state{}}).
+            {next_state, stream_request, State#state{
+                socket = Socket, buffer = <<>>, vbucket_uuid = VBucketUUID
+            }, Timeout};
+        _Error ->
+            {stop, connect_failed, State}
+    end;
 stream_request(timeout, State) ->
     {stop, timeout, State}.
 

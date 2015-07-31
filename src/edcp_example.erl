@@ -15,7 +15,7 @@
 -include("edcp_protocol.hrl").
 
 -export([
-    open_stream/4,
+    open_stream/3,
     stream_starting/3, stream_snapshot/3, stream_end/1, stream_info/2,
     handle_snapshot_item/2, handle_stream_error/2, handle_stream_end/2]).
 
@@ -24,8 +24,8 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-open_stream([Host, Port], [VBucketUUID, SeqNoStart, SeqNoEnd], Timeout, ModState) ->
-    edcp_consumer_sup:start([Host, Port], [VBucketUUID, SeqNoStart, SeqNoEnd], Timeout, ModState).
+open_stream([Host, Port], [VBucketUUID, SeqNoStart, SeqNoEnd], ModState) ->
+    edcp_consumer_sup:start([Host, Port], [VBucketUUID, SeqNoStart, SeqNoEnd], ModState).
 
 %%%===================================================================
 %%% edcp_producer callbacks

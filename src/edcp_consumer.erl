@@ -70,12 +70,12 @@
 %%--------------------------------------------------------------------
 -spec(start_link(
     Mod :: module(),
+    timeout(),
     ProducerAddress :: term(),
     RequestParameters :: term(),
-    timeout(),
     ModState :: term()) ->
     {ok, pid()} | ignore | {error, Reason :: term()}).
-start_link(CallbackMod, ProducerAddress, RequestParameters, Timeout, ModState) ->
+start_link(CallbackMod, Timeout, ProducerAddress, RequestParameters, ModState) ->
     gen_fsm:start_link(?MODULE,
         [ProducerAddress, RequestParameters, Timeout, {CallbackMod, ModState}],
         []).

@@ -45,6 +45,8 @@
 -record(state, {
     socket :: any(),
     transport :: module(),
+    timeout :: timeout(),
+    hang_timer = undefined :: any(),
     mod :: module()}).
 
 -compile([{parse_transform, lager_transform}]).
@@ -62,12 +64,12 @@ push_item(Pid, Item) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-init(Ref, Socket, Transport, [{callback, CallbackMod}]) ->
+init(Ref, Socket, Transport, [{callback, CallbackMod}, {timeout, Timeout}]) ->
     ok = ranch:accept_ack(Ref),
-    wait_request(<<>>, #state{socket=Socket, transport=Transport, mod = CallbackMod}).
+    wait_request(<<>>, #state{socket=Socket, transport=Transport, mod = CallbackMod, timeout = Timeout}).
 
-wait_request(Buffer, State = #state{socket=Socket, transport=Transport}) ->
-    case Transport:recv(Socket, 0, infinity) of
+wait_request(Buffer, State = #state{socket=Socket, transport=Transport, timeout = Timeout}) ->
+    case Transport:recv(Socket, 0, Timeout) of
         {ok, Data} ->
             parse_request(<< Buffer/binary, Data/binary >>, State);
         {error, _} ->
@@ -102,6 +104,8 @@ handle_packets([Packet | Rest], State) ->
             {shutdown, Reason, State2}
     end.
 
+handle_request(#edcp_packet{magic = ?Magic_Request, op_code = ?OP_Noop}, State) ->
+    {ok, State};
 handle_request(Request = #edcp_packet{magic = ?Magic_Request, op_code = ?OP_StreamRequest},
     State = #state{socket=Socket, transport=Transport, mod = Mod}) ->
     #edcp_stream_request{
@@ -144,7 +148,9 @@ handle_request(Request = #edcp_packet{magic = ?Magic_Request, op_code = ?OP_Stre
 
 handle_snapshot(SnapshotStart, SeqEnd, _ModState, State) when SeqEnd =/= 0 andalso SnapshotStart > SeqEnd ->
     {ok, State};
-handle_snapshot(SnapshotStart, SeqEnd, ModState, State = #state{socket=Socket, transport=Transport, mod = Mod}) ->
+handle_snapshot(SnapshotStart, SeqEnd, ModState, State = #state{
+    socket=Socket, transport=Transport, mod = Mod, timeout = Timeout
+}) ->
     case Mod:stream_snapshot(SnapshotStart, SeqEnd, ModState) of
         {ok, ItemList, NewModState} when length(ItemList) > 0 ->
             case send_snapshot(SnapshotStart, ItemList, State) of
@@ -155,7 +161,10 @@ handle_snapshot(SnapshotStart, SeqEnd, ModState, State = #state{socket=Socket, t
             end;
         {hang, NewModState} ->
             ok = Transport:setopts(Socket, [{active, once}]),
-            Result = handle_mailbox(SnapshotStart, SeqEnd, NewModState, State),
+
+            Timer = erlang:start_timer(Timeout, self(), ping_timeout),
+            Result = handle_mailbox(SnapshotStart, SeqEnd, NewModState, State#state{hang_timer = Timer}),
+
             ok = Transport:setopts(Socket, [{active, false}]),
             Result;
         {stop, NewModState} ->
@@ -164,7 +173,9 @@ handle_snapshot(SnapshotStart, SeqEnd, ModState, State = #state{socket=Socket, t
             {error, {SnapshotStart, SeqEnd}, Reason}
     end.
 
-handle_mailbox(SnapshotStart, SeqEnd, NewModState, State = #state{socket=Socket, transport=Transport, mod = Mod}) ->
+handle_mailbox(SnapshotStart, SeqEnd, NewModState, State = #state{
+    socket=Socket, transport=Transport, mod = Mod, timeout = Timeout, hang_timer = Timer
+}) ->
     receive
         {push_item, {SeqNo, Log}} when SeqNo =< SnapshotStart ->
             case send_snapshot(SeqNo, [{SeqNo, Log}], State) of
@@ -180,6 +191,13 @@ handle_mailbox(SnapshotStart, SeqEnd, NewModState, State = #state{socket=Socket,
             Transport:send(Socket, edcp_protocol:encode(#edcp_packet{
                 magic = ?Magic_Response, op_code = ?OP_Noop, status = ?Status_NoError
             })),
+            erlang:cancel_timer(Timer),
+            NewTimer = erlang:start_timer(Timeout, self(), ping_timeout),
+            handle_mailbox(SnapshotStart, SeqEnd, NewModState, State#state{hang_timer = NewTimer});
+        {timeout, Timer, ping_timeout} ->
+            lager:debug("connection timeout, normally shutdown ~p", [Socket]),
+            {ok, NewModState};
+        {timeout, _Timer, ping_timeout} ->
             handle_mailbox(SnapshotStart, SeqEnd, NewModState, State);
         {tcp_closed, Socket} ->
             {ok, NewModState};

@@ -21,12 +21,14 @@ producer_ranch_config() ->
 producer_config() ->
     {ok, App}  = application:get_application(?MODULE),
     CallbackMod = application:get_env(App, producer_callback, edcp_example),
+    Timeout = application:get_env(App, connection_timeout, 60000),
 
-    [{callback, CallbackMod}].
+    [{callback, CallbackMod}, {timeout, Timeout}].
 
 consumer_config() ->
     {ok, App}  = application:get_application(?MODULE),
     CallbackMod = application:get_env(App, consumer_callback, edcp_example),
     ReconnectDelay = application:get_env(App, consumer_reconnect_delay, 30),
+    Timeout = application:get_env(App, connection_timeout, 60000),
 
-    [{callback, CallbackMod}, {reconnect_delay, ReconnectDelay}].
+    [{callback, CallbackMod}, {reconnect_delay, ReconnectDelay}, {timeout, Timeout}].

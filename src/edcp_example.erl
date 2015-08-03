@@ -17,7 +17,7 @@
 -export([
     open_stream/3,
     stream_starting/3, stream_snapshot/3, stream_end/1, stream_info/2,
-    handle_snapshot_item/2, handle_stream_error/2, handle_stream_end/2]).
+    handle_snapshot_marker/3, handle_snapshot_item/2, handle_stream_error/2, handle_stream_end/2]).
 
 -compile([{parse_transform, lager_transform}]).
 
@@ -73,6 +73,9 @@ stream_info({newitem, {SeqNo, Log}}, ModState) ->
 %%%===================================================================
 %%% edcp_consumer callbacks
 %%%===================================================================
+handle_snapshot_marker(_SnapshotStart, _SnapshotEnd, ModState) ->
+    {ok, ModState}.
+
 handle_snapshot_item(Item = {_SeqNo, _Log}, ModState) ->
     lager:debug("receive ~p", [Item]),
     {ok, ModState}.

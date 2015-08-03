@@ -27,6 +27,13 @@
     terminate/3,
     code_change/4]).
 
+-callback handle_snapshot_marker(
+    SnapshotStart::integer(),
+    SnapshotEnd::integer(),
+    ModState::term()) ->
+    {ok, NewModState::term()} |
+    {error, Reason::term()}.
+
 -callback handle_snapshot_item(
     Item::any(),
     ModState::term()) ->
@@ -332,13 +339,22 @@ handle_packet(#edcp_packet{
     Mod:handle_stream_error({request_error, ErrorCode}, ModState),
     {stream_end, State};
 
-handle_packet(Packet = #edcp_packet{op_code = ?OP_SnapshotMarker}, snapshot, State = #state{vbucket_uuid = VBucketUUID}) ->
+handle_packet(Packet = #edcp_packet{op_code = ?OP_SnapshotMarker}, snapshot, State = #state{
+    vbucket_uuid = VBucketUUID, mod = Mod, mod_state = ModState
+}) ->
     #edcp_snapshot_marker{seqno_start = Start, seqno_end = End} = edcp_protocol:decode_snapshot_marker(Packet),
-    [{VBucketUUID, StreamRequest}] = ets:lookup(edcp_consumer_vbucket, VBucketUUID),
-    ets:insert(edcp_consumer_vbucket, {
-        VBucketUUID, StreamRequest#edcp_stream_request{snapshot_start = Start, snapshot_end = End}
-    }),
-    {snapshot, State};
+    case Mod:handle_snapshot_marker(Start, End, ModState) of
+        {ok, NewModState} ->
+            [{VBucketUUID, StreamRequest}] = ets:lookup(edcp_consumer_vbucket, VBucketUUID),
+            ets:insert(edcp_consumer_vbucket, {
+                VBucketUUID, StreamRequest#edcp_stream_request{snapshot_start = Start, snapshot_end = End}
+            }),
+            {snapshot, State#state{mod_state = NewModState}};
+        {error, Reason} ->
+            ets:delete(edcp_consumer_vbucket, VBucketUUID),
+            Mod:handle_stream_error(Reason, ModState),
+            {stream_end, State}
+    end;
 
 handle_packet(Packet = #edcp_packet{op_code = ?OP_Log}, snapshot, State = #state{
     mod = Mod, mod_state = ModState, vbucket_uuid = VBucketUUID

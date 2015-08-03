@@ -327,7 +327,8 @@ handle_packet(#edcp_packet{
     {snapshot, State};
 handle_packet(#edcp_packet{
     magic = ?Magic_Response, op_code = ?OP_StreamRequest, status = ErrorCode
-}, stream_request, State = #state{mod = Mod, mod_state = ModState}) ->
+}, stream_request, State = #state{mod = Mod, mod_state = ModState, vbucket_uuid = VBucketUUID}) ->
+    ets:delete(edcp_consumer_vbucket, VBucketUUID),
     Mod:handle_stream_error({request_error, ErrorCode}, ModState),
     {stream_end, State};
 
@@ -339,12 +340,15 @@ handle_packet(Packet = #edcp_packet{op_code = ?OP_SnapshotMarker}, snapshot, Sta
     }),
     {snapshot, State};
 
-handle_packet(Packet = #edcp_packet{op_code = ?OP_Log}, snapshot, State = #state{mod = Mod, mod_state = ModState}) ->
+handle_packet(Packet = #edcp_packet{op_code = ?OP_Log}, snapshot, State = #state{
+    mod = Mod, mod_state = ModState, vbucket_uuid = VBucketUUID
+}) ->
     #edcp_log{seqno = SeqNo, log = Log} = edcp_protocol:decode_log(Packet),
     case Mod:handle_snapshot_item({SeqNo, Log}, ModState) of
         {ok, NewModState} ->
             {snapshot, State#state{mod_state = NewModState}};
         {error, Reason} ->
+            ets:delete(edcp_consumer_vbucket, VBucketUUID),
             Mod:handle_stream_error(Reason, ModState),
             {stream_end, State}
     end;

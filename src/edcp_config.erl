@@ -10,7 +10,7 @@
 -author("zy").
 
 %% API
--export([producer_ranch_config/0, producer_config/0, consumer_config/0]).
+-export([producer_ranch_config/0, producer_config/0, consumer_config/0, server_id_config/0]).
 
 producer_ranch_config() ->
     {ok, App}  = application:get_application(?MODULE),
@@ -32,3 +32,9 @@ consumer_config() ->
     Timeout = application:get_env(App, connection_timeout, 60000),
 
     [{callback, CallbackMod}, {reconnect_delay, ReconnectDelay}, {timeout, Timeout}].
+
+server_id_config() ->
+    {ok, App}  = application:get_application(?MODULE),
+    ServerId = application:get_env(App, server_id, 0),
+
+    [{server_id, ServerId}].
